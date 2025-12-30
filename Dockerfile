@@ -30,6 +30,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     postgresql \
     postgresql-client \
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Overwrite pg_hba.conf for full trust authentication for local connections
@@ -40,5 +42,19 @@ RUN echo "local   all             all                                     trust"
 # Set a working directory
 WORKDIR /app
 
-# Default command to start a shell
-CMD ["/bin/bash"]
+# Copy application files before installing dependencies
+COPY ./server /app/server
+COPY ./static /app/static
+
+# Install uv, create venv in a non-mounted location, and install dependencies
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    export PATH="/root/.local/bin:$PATH" && \
+    uv venv /opt/venv && \
+    uv pip install --python /opt/venv/bin/python fastapi uvicorn websockets
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Default command to start services and the app
+# The working directory is changed to /app/server so uvicorn can find main:app
+CMD ["bash", "-c", "service postgresql start && echo 'PostgreSQL started.' && cd /app/server && /opt/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000"]

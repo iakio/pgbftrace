@@ -24,4 +24,5 @@ docker run --rm -it \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -v /usr/src:/usr/src:ro \
   -v "$PWD":/app \
-  bpftrace-dev "$@"
+  -p 8000:8000 \
+  bpftrace-dev

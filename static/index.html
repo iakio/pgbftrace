@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PostgreSQL Buffer Tracer</title>
+</head>
+<body>
+    <h1>PostgreSQL Buffer Trace Visualizer</h1>
+    <p>Connecting to WebSocket...</p>
+    <div id="messages"></div>
+
+    <script>
+        var ws = new WebSocket("ws://localhost:8000/ws"); // FastAPIのWebSocketエンドポイント
+
+        ws.onopen = function(event) {
+            document.getElementById("messages").innerHTML += "<p>Connected to WebSocket.</p>";
+        };
+
+        ws.onmessage = function(event) {
+            var messages = document.getElementById("messages");
+            var data = JSON.parse(event.data);
+            
+            // コンソールにオブジェクトとして表示
+            console.log(data);
+
+            // 画面にテキストとして表示
+            var message = document.createElement("p");
+            message.textContent = `Received: OID=${data.oid}, Block=${data.block}`;
+            messages.appendChild(message);
+        };
+
+        ws.onclose = function(event) {
+            document.getElementById("messages").innerHTML += "<p>Disconnected from WebSocket.</p>";
+        };
+
+        ws.onerror = function(error) {
+            document.getElementById("messages").innerHTML += "<p>WebSocket Error: " + error.message + "</p>";
+        };
+    </script>
+</body>
+</html>
