@@ -10,83 +10,88 @@
         #legend { margin-top: 20px; width: 80%; display: flex; flex-wrap: wrap; justify-content: center; }
         .legend-item { display: flex; align-items: center; margin: 5px 10px; }
         .legend-color { width: 15px; height: 15px; border: 1px solid #ccc; margin-right: 5px; }
+        .table-canvas-wrapper {
+            margin: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
     <h1>PostgreSQL Buffer Trace Visualizer</h1>
     <div id="legend"></div>
-    <canvas id="bufferCanvas" width="1200" height="800"></canvas>
+    <div id="canvas-container" style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center;">
+        <!-- Dynamically generated canvases will go here -->
+    </div>
     <div id="messages"></div>
 
     <script>
         const messages = document.getElementById("messages");
-        const canvas = document.getElementById("bufferCanvas");
-        const ctx = canvas.getContext("2d");
+        const canvasContainer = document.getElementById("canvas-container"); // 新しいコンテナ
 
         const BLOCK_SIZE = 5; // 各ブロックを描画する際のピクセルサイズ
         const BLOCK_MARGIN = 1; // ブロック間のマージン
         const HEADER_HEIGHT = 20; // テーブル名表示領域の高さ
         const TABLE_PADDING = 10; // テーブル領域の外側パディング
+        const CANVAS_WIDTH_PER_TABLE = 400; // 各テーブルのCanvasの幅（固定）
 
         let relations = []; // 全リレーション情報
-        const relationColors = {}; // OIDと色をマッピング
+        const ctxs = {}; // relfilenodeごとに描画コンテキストを保存
 
-        // Canvasの初期描画
-        function drawInitialCanvas(relationsData) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // キャンバスをクリア
+        // Canvasの初期描画（各テーブルのCanvasを生成）
+        function createAndDrawTableCanvas(rel) {
+            const tableDiv = document.createElement("div");
+            tableDiv.className = "table-canvas-wrapper";
+            tableDiv.style.border = "1px solid #ddd";
+            tableDiv.style.padding = "10px";
+            tableDiv.style.backgroundColor = "#fff";
+            tableDiv.style.borderRadius = "5px";
+
+            const headerDiv = document.createElement("div");
+            headerDiv.className = "table-header";
+            headerDiv.style.fontWeight = "bold";
+            headerDiv.style.marginBottom = "5px";
+            headerDiv.textContent = `${rel.relname} (OID: ${rel.oid}, Blocks: ${rel.total_blocks})`;
+            tableDiv.appendChild(headerDiv);
+
+            const canvas = document.createElement("canvas");
+            canvas.id = `canvas-${rel.relfilenode}`; // Canvas IDはrelfilenode
+            canvas.width = CANVAS_WIDTH_PER_TABLE; // 各テーブルのCanvasは固定幅
+            tableDiv.appendChild(canvas);
+            canvasContainer.appendChild(tableDiv);
+
+            const ctx = canvas.getContext("2d");
+            ctxs[rel.relfilenode] = ctx; // コンテキストをrelfilenodeで管理
+
+            // Canvasの高さ計算
+            const blocksPerRow = Math.floor(
+                (canvas.width - 2 * TABLE_PADDING) / (BLOCK_SIZE + BLOCK_MARGIN)
+            );
+            const numRows = Math.ceil(rel.total_blocks / blocksPerRow);
+            canvas.height = numRows * (BLOCK_SIZE + BLOCK_MARGIN) + TABLE_PADDING;
+
+            // 各テーブルの描画情報を更新 (描画開始Y座標はCanvas内での相対座標になる)
+            rel.drawInfo = {
+                blocksStartY: TABLE_PADDING, // 各Canvas内でのブロック開始Y座標
+                blocksPerRow: blocksPerRow,
+            };
+
+            // 初期グリッド描画
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = "#f8f8f8";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 各テーブルの描画位置情報を計算し、保存
-            let currentY = TABLE_PADDING;
-            let totalCanvasHeight = TABLE_PADDING; // Canvasの合計高さの初期値
+            let blockX = TABLE_PADDING;
+            let blockY = TABLE_PADDING; // 各Canvas内でのブロック開始Y座標
 
-            relationsData.forEach((rel) => {
-                const totalBlocks = rel.total_blocks;
-                const blocksPerRow = Math.floor(
-                    (canvas.width - 2 * TABLE_PADDING) /
-                    (BLOCK_SIZE + BLOCK_MARGIN)
-                );
-                const numRows = Math.ceil(totalBlocks / blocksPerRow);
-
-                // 各テーブルの領域情報
-                rel.drawInfo = {
-                    startY: currentY,
-                    headerY: currentY + 15,
-                    blocksStartY: currentY + HEADER_HEIGHT + 5,
-                    height: HEADER_HEIGHT + 5 + numRows * (BLOCK_SIZE + BLOCK_MARGIN),
-                };
-
-                // テーブル名表示
-                ctx.fillStyle = "#333";
-                ctx.font = "14px sans-serif";
-                ctx.fillText(
-                    `${rel.relname} (OID: ${rel.oid}, Blocks: ${totalBlocks})`,
-                    TABLE_PADDING,
-                    rel.drawInfo.headerY
-                );
-
-                // ブロックのグリッドを描画
-                let blockX = TABLE_PADDING;
-                let blockY = rel.drawInfo.blocksStartY;
-
-                for (let i = 0; i < totalBlocks; i++) {
-                    ctx.fillStyle = "#eee"; // デフォルトのブロック色（より明るく）
-                    ctx.fillRect(blockX, blockY, BLOCK_SIZE, BLOCK_SIZE);
-                    blockX += BLOCK_SIZE + BLOCK_MARGIN;
-                    if ((i + 1) % blocksPerRow === 0) {
-                        blockX = TABLE_PADDING;
-                        blockY += BLOCK_SIZE + BLOCK_MARGIN;
-                    }
+            for (let i = 0; i < rel.total_blocks; i++) {
+                ctx.fillStyle = "#eee"; // デフォルトのブロック色
+                ctx.fillRect(blockX, blockY, BLOCK_SIZE, BLOCK_SIZE);
+                blockX += BLOCK_SIZE + BLOCK_MARGIN;
+                if ((i + 1) % blocksPerRow === 0) {
+                    blockX = TABLE_PADDING;
+                    blockY += BLOCK_SIZE + BLOCK_MARGIN;
                 }
-                // 次のテーブルのY座標を更新
-                currentY += rel.drawInfo.height + TABLE_PADDING;
-                totalCanvasHeight += rel.drawInfo.height + TABLE_PADDING;
-            });
-            // 計算された合計高さに基づいてCanvasの高さを設定
-            canvas.height = totalCanvasHeight + TABLE_PADDING; // 下部にも少しパディング
-
-            createLegend(relationsData);
+            }
         }
 
         function createLegend(relationsData) {
@@ -113,8 +118,11 @@
                 console.log("Initialized relations:", relations);
                 messages.innerHTML += `<p>Initialized with ${relations.length} relations.</p>`;
 
-                // Canvasの初期描画
-                drawInitialCanvas(relations);
+                // 各テーブルごとにCanvasを作成し描画
+                relations.forEach(createAndDrawTableCanvas);
+
+                // 凡例作成
+                createLegend(relations);
 
                 // 2. After fetching info, connect to WebSocket
                 setupWebSocket();
@@ -134,10 +142,10 @@
 
             ws.onmessage = function (event) {
                 const dataView = new DataView(event.data);
-                const oid = dataView.getUint32(0, false);
-                const block = dataView.getUint32(4, false);
+                const relfilenode = dataView.getUint32(0, false); // 最初の4バイトはrelfilenode
+                const block = dataView.getUint32(4, false); // 次の4バイトはblock
 
-                const messageText = `Received Trace: OID=${oid}, Block=${block}`;
+                const messageText = `Received Trace: RelFilenode=${relfilenode}, Block=${block}`;
                 // console.log(messageText); // ログが多すぎるときはコメントアウト
 
                 const messageElement = document.createElement("p");
@@ -149,7 +157,7 @@
                 messages.appendChild(messageElement);
                 messages.scrollTop = messages.scrollHeight;
 
-                highlightBlock(oid, block);
+                highlightBlock(relfilenode, block);
             };
 
             ws.onclose = function (event) {
@@ -164,29 +172,36 @@
         }
 
         // ブロックをハイライトする関数
-        function highlightBlock(oid, blockNumber) {
-            const relInfo = relations.find((r) => r.oid === oid);
+        function highlightBlock(relfilenode, blockNumber) {
+            const relInfo = relations.find((r) => r.relfilenode === relfilenode);
             if (!relInfo || !relInfo.drawInfo) {
-                console.warn(`Relation with OID ${oid} not found or drawInfo missing.`);
+                console.warn(
+                    `Relation with relfilenode ${relfilenode} not found or drawInfo missing.`
+                );
                 return;
             }
 
-            const blocksPerRow = Math.floor(
-                (canvas.width - 2 * TABLE_PADDING) / (BLOCK_SIZE + BLOCK_MARGIN)
-            );
+            const ctx = ctxs[relfilenode]; // 対象Canvasのコンテキストを取得
+            if (!ctx) {
+                console.warn(`Canvas context for relfilenode ${relfilenode} not found.`);
+                return;
+            }
+
+            const blocksPerRow = relInfo.drawInfo.blocksPerRow; // 各CanvasのblocksPerRowを使用
             const row = Math.floor(blockNumber / blocksPerRow);
             const col = blockNumber % blocksPerRow;
 
             const x = TABLE_PADDING + col * (BLOCK_SIZE + BLOCK_MARGIN);
-            const y = relInfo.drawInfo.blocksStartY + row * (BLOCK_SIZE + BLOCK_MARGIN);
+            const y =
+                relInfo.drawInfo.blocksStartY + row * (BLOCK_SIZE + BLOCK_MARGIN); // Canvas内でのY座標
 
             // ハイライト (一時的に色を変える)
-            ctx.fillStyle = "#ccc"; // アクセス時の色（少し濃いグレー）
+            ctx.fillStyle = "#87CEEB"; // アクセス時の色（目に優しいソフトブルー）
             ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
 
             // タイムアウトで元の色に戻す (デフラグ風)
             setTimeout(() => {
-                ctx.fillStyle = "#eee"; // デフォルトのブロック色に戻す
+                ctx.fillStyle = "#eee"; // デフォルトのブロック色に戻す (意図的な残影)
                 ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
             }, 500); // 0.5秒後に戻る
         }

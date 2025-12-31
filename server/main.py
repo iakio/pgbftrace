@@ -42,23 +42,25 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# グローバル変数としてPostgreSQLのOID->名前マップをキャッシュする
-relation_oid_to_name: Dict[int, str] = {}
+# グローバル変数としてPostgreSQLのFILENODE->名前マップをキャッシュする
+relation_filenode_to_name: Dict[int, str] = {}
+relation_filenode_to_info: Dict[int, Dict[str, Any]] = {} # relfilenode -> complete info (oid, name, blocks)
 
 def fetch_and_cache_relations():
     """
     PostgreSQLからリレーション情報を取得し、キャッシュを更新しつつ、
     APIレスポンス用のリストを返す。
     """
-    global relation_oid_to_name
+    global relation_filenode_to_name, relation_filenode_to_info
     conn = None
     relations_for_api = []
-    temp_oid_map = {}
+    temp_filenode_map = {}
+    temp_filenode_info_map = {}
     try:
         conn = psycopg2.connect("dbname='postgres' user='postgres' host='localhost' port='5432'")
         cur = conn.cursor()
         cur.execute("""
-            SELECT c.oid, c.relname, c.relpages
+            SELECT c.oid, c.relname, c.relpages, c.relfilenode
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE c.relkind IN ('r', 'i', 'p', 'I')
@@ -68,16 +70,22 @@ def fetch_and_cache_relations():
         results = cur.fetchall()
         cur.close()
 
-        for oid, relname, relpages in results:
+        for oid, relname, relpages, relfilenode in results:
+            if relfilenode == 0: # relfilenodeが0の場合は物理ファイルがないのでスキップ
+                continue
+
             # APIレスポンス用のデータを作成
             total_blocks = relpages if relpages > 0 else 1 
-            relations_for_api.append({"oid": oid, "relname": relname, "total_blocks": total_blocks})
+            info = {"oid": oid, "relname": relname, "total_blocks": total_blocks, "relfilenode": relfilenode}
+            relations_for_api.append(info)
             
             # キャッシュ用のデータを作成
-            temp_oid_map[oid] = relname
+            temp_filenode_map[relfilenode] = relname
+            temp_filenode_info_map[relfilenode] = info
 
-        relation_oid_to_name = temp_oid_map # キャッシュをアトミックに更新
-        print(f"Fetched and cached {len(relations_for_api)} relations.")
+        relation_filenode_to_name = temp_filenode_map # キャッシュをアトミックに更新
+        relation_filenode_to_info = temp_filenode_info_map
+        print(f"Fetched and cached {len(relations_for_api)} relations. Cached filenodes: {list(relation_filenode_to_name.keys())}") # ★ログ追加★
 
     except Exception as e:
         print(f"Error fetching and caching relations: {e}")
@@ -111,21 +119,33 @@ async def run_bpftrace():
         async for line in process.stdout:
             try:
                 line_str = line.decode().strip()
-                if not line_str.startswith("oid:"):
-                    continue
+                if line_str.startswith("relfilenode:"): # 新しい出力フォーマットを検出
+                    parsed_data = {}
+                    try:
+                        # "key:value key:value ..." 形式をパース
+                        for item in line_str.split():
+                            key, value = item.split(':', 1)
+                            parsed_data[key] = int(value)
 
-                parts = line_str.split()
-                oid_part = parts[0].split(':')
-                block_part = parts[1].split(':')
+                        relfilenode = parsed_data.get('relfilenode', None)
+                        block = parsed_data.get('block', None)
 
-                if len(oid_part) == 2 and len(block_part) == 2:
-                    oid = int(oid_part[1])
-                    
-                    if oid in relation_oid_to_name:
-                        block = int(block_part[1])
-                        packed_data = struct.pack('!II', oid, block)
-                        await manager.broadcast_bytes(packed_data)
+                        if relfilenode is not None and block is not None:
+                            print(f"bpftrace parsed: relfilenode={relfilenode}, Block={block}, Full Data={parsed_data}")
+                            
+                            if relfilenode in relation_filenode_to_name:
+                                packed_data = struct.pack('!II', relfilenode, block)
+                                await manager.broadcast_bytes(packed_data)
+                            else:
+                                print(f"bpftrace filtered: filenode={relfilenode} not in cache.")
+                        else:
+                            print(f"bpftrace malformed data: relfilenode or Block missing in {parsed_data}")
 
+                    except Exception as e:
+                        print(f"bpftrace parsing error for line '{line_str}': {e}")
+
+            except Exception as e:
+                print(f"Error processing bpftrace output: {e}")
             except Exception as e:
                 print(f"Error processing bpftrace output: {e}")
     
