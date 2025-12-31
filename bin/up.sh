@@ -18,7 +18,7 @@ echo ""
 echo "Starting bpftrace development container..."
 echo "Note: This container requires '--privileged' or specific capabilities and volume mounts to access BPF features."
 
-docker run --rm -it \
+docker run --rm -d \
   --privileged \
   -v /sys/kernel/debug:/sys/kernel/debug:ro \
   -v /sys/fs/bpf:/sys/fs/bpf \

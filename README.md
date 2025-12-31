@@ -85,15 +85,27 @@ psql -U postgres -d postgres
 
 ## 🛠️ 内部アーキテクチャ
 
-このツールは以下のコンポーネントで構成されています。
+このツールはモジュラーアーキテクチャで構成されており、以下のコンポーネントで動作します。
 
+### **BPFトレーシング層**
 -   **`bpftrace`**: PostgreSQLの`buffer__read__done` USDTプローブをフックし、`relfilenode` (arg4) と `block` (arg1) を取得。16進数固定長形式 (`%08x%08x`) で出力します。
--   **`FastAPI` (Python)**:
-    -   HTTP `GET /api/relations`: PostgreSQLからテーブル情報 (`oid`, `relname`, `relpages`, `relfilenode`) を取得してJSON形式で提供します。この際、`relfilenode`をキーとしたキャッシュを更新します。
-    -   WebSocket `/ws`: `bpftrace`からの16進数固定長出力（16文字）をパースし、キャッシュされた`relfilenode`を持つI/Oイベントのみを抽出。`relfilenode`と`block`をバイナリ形式 (`struct.pack('!II', ...)` ) でクライアントにブロードキャストします。
+
+### **Python バックエンド層**
+-   **`main.py`**: FastAPIのルーティングとアプリケーション初期化を管理
+-   **`config.py`**: 環境変数による設定管理（PostgreSQL接続、bpftraceパス等）
+-   **`database.py`**: PostgreSQL操作とリレーション情報のキャッシュ管理
+-   **`bpftrace_manager.py`**: bpftraceプロセスのライフサイクル管理と出力パース
+-   **`websocket_manager.py`**: WebSocket接続の管理とブロードキャスト処理
+-   **`models.py`**: データモデル定義（`TraceEvent`, `RelationInfo`）
+
+### **API エンドポイント**
+-   **HTTP `GET /api/relations`**: PostgreSQLからテーブル情報を取得してJSON形式で提供。`relfilenode`キャッシュも更新。
+-   **WebSocket `/ws`**: `bpftrace`からの16進数固定長出力（16文字）をパースし、キャッシュされた`relfilenode`のI/Oイベントのみをバイナリ形式でブロードキャスト。
+
+### **フロントエンド層**
 -   **Vanilla JavaScript (ブラウザ)**:
-    -   `GET /api/relations`で初期テーブル情報を取得し、各テーブルに対応するCanvasを動的に生成します。
-    -   WebSocketで受信したバイナリデータをパースし、対応するCanvasのブロックをハイライト表示します。
+    -   `GET /api/relations`で初期テーブル情報を取得し、各テーブルに対応するCanvasを動的に生成
+    -   WebSocketで受信したバイナリデータをパースし、対応するCanvasのブロックをハイライト表示
 
 ## 📄 ライセンス
 
