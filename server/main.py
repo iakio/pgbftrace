@@ -42,10 +42,18 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-def get_pg_relation_info():
-    """PostgreSQLからリレーション情報を取得する"""
+# グローバル変数としてPostgreSQLのOID->名前マップをキャッシュする
+relation_oid_to_name: Dict[int, str] = {}
+
+def fetch_and_cache_relations():
+    """
+    PostgreSQLからリレーション情報を取得し、キャッシュを更新しつつ、
+    APIレスポンス用のリストを返す。
+    """
+    global relation_oid_to_name
     conn = None
-    relations = []
+    relations_for_api = []
+    temp_oid_map = {}
     try:
         conn = psycopg2.connect("dbname='postgres' user='postgres' host='localhost' port='5432'")
         cur = conn.cursor()
@@ -54,21 +62,30 @@ def get_pg_relation_info():
             FROM pg_class c
             JOIN pg_namespace n ON n.oid = c.relnamespace
             WHERE c.relkind IN ('r', 'i', 'p', 'I')
-              AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-            ORDER BY c.relname;
+              AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast');
         """)
         
-        for oid, relname, relpages in cur.fetchall():
-            total_blocks = relpages if relpages > 0 else 1 
-            relations.append({"oid": oid, "relname": relname, "total_blocks": total_blocks})
+        results = cur.fetchall()
         cur.close()
-        print(f"Fetched {len(relations)} PostgreSQL relations.")
+
+        for oid, relname, relpages in results:
+            # APIレスポンス用のデータを作成
+            total_blocks = relpages if relpages > 0 else 1 
+            relations_for_api.append({"oid": oid, "relname": relname, "total_blocks": total_blocks})
+            
+            # キャッシュ用のデータを作成
+            temp_oid_map[oid] = relname
+
+        relation_oid_to_name = temp_oid_map # キャッシュをアトミックに更新
+        print(f"Fetched and cached {len(relations_for_api)} relations.")
+
     except Exception as e:
-        print(f"Error connecting to PostgreSQL or fetching relation info: {e}")
+        print(f"Error fetching and caching relations: {e}")
     finally:
         if conn:
             conn.close()
-    return relations
+    
+    return relations_for_api
 
 async def run_bpftrace():
     """
@@ -103,11 +120,11 @@ async def run_bpftrace():
 
                 if len(oid_part) == 2 and len(block_part) == 2:
                     oid = int(oid_part[1])
-                    block = int(block_part[1])
                     
-                    # OIDとBlock Numberを2つの符号なし4バイト整数としてパック
-                    packed_data = struct.pack('!II', oid, block) # Network byte order
-                    await manager.broadcast_bytes(packed_data)
+                    if oid in relation_oid_to_name:
+                        block = int(block_part[1])
+                        packed_data = struct.pack('!II', oid, block)
+                        await manager.broadcast_bytes(packed_data)
 
             except Exception as e:
                 print(f"Error processing bpftrace output: {e}")
@@ -117,6 +134,8 @@ async def run_bpftrace():
 
 @app.on_event("startup")
 async def startup_event():
+    await asyncio.sleep(5)
+    fetch_and_cache_relations() # 起動時に一度キャッシュを作成
     asyncio.create_task(run_bpftrace())
 
 @app.get("/")
@@ -127,9 +146,8 @@ async def read_root():
 
 @app.get("/api/relations", response_class=JSONResponse)
 def get_relations():
-    """HTTP GETエンドポイントでリレーション情報を返す"""
-    relations = get_pg_relation_info()
-    return relations
+    """HTTP GETエンドポイントでリレーション情報を返し、同時にOIDマップも更新する"""
+    return fetch_and_cache_relations()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -141,5 +159,4 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         print("Client disconnected")
-
 

@@ -25,4 +25,5 @@ docker run --rm -it \
   -v /usr/src:/usr/src:ro \
   -v "$PWD":/app \
   -p 8000:8000 \
+  --name pgbftrace_app \
   bpftrace-dev
