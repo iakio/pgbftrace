@@ -2,10 +2,12 @@ import asyncio
 import json
 import psycopg2
 import struct # For packing binary data
+import signal
+import sys
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 app = FastAPI()
 
@@ -19,14 +21,28 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        print(f"Client connected. Total clients: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
             print(f"Client disconnected. Total clients: {len(self.active_connections)}")
 
+    async def disconnect_all(self):
+        """全てのWebSocket接続を安全に閉じる"""
+        connections_to_close = list(self.active_connections)
+        for connection in connections_to_close:
+            try:
+                await connection.close(code=1001, reason="Server shutting down")
+            except Exception as e:
+                print(f"Error closing WebSocket connection: {e}")
+        self.active_connections.clear()
+        print("All WebSocket connections closed.")
 
     async def broadcast_bytes(self, message: bytes):
+        if not self.active_connections:
+            return
+            
         disconnected_connections = []
         for connection in self.active_connections:
             try:
@@ -45,6 +61,9 @@ manager = ConnectionManager()
 # グローバル変数としてPostgreSQLのFILENODE->名前マップをキャッシュする
 relation_filenode_to_name: Dict[int, str] = {}
 relation_filenode_to_info: Dict[int, Dict[str, Any]] = {} # relfilenode -> complete info (oid, name, blocks)
+
+# グローバルなbpftraceプロセス参照
+bpftrace_process: Optional[asyncio.subprocess.Process] = None
 
 def fetch_and_cache_relations():
     """
@@ -99,64 +118,122 @@ async def run_bpftrace():
     """
     bpftraceをサブプロセスとして実行し、その出力をバイナリ形式でWebSocketにブロードキャストする
     """
+    global bpftrace_process
+    
     bpftrace_path = "/usr/bin/bpftrace"
     script_path = "/app/server/trace_buffer_read.bt"
     command = [bpftrace_path, script_path]
 
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
+    try:
+        bpftrace_process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-    print("bpftrace process starting...")
+        print(f"bpftrace process started with PID: {bpftrace_process.pid}")
 
-    async def log_stderr():
-        async for line in process.stderr:
-            print(f"bpftrace stderr: {line.decode().strip()}")
-
-    async def process_stdout():
-        async for line in process.stdout:
+        async def log_stderr():
             try:
-                line_str = line.decode().strip()
-                if line_str.startswith("relfilenode:"): # 新しい出力フォーマットを検出
-                    parsed_data = {}
+                async for line in bpftrace_process.stderr:
+                    print(f"bpftrace stderr: {line.decode().strip()}")
+            except Exception as e:
+                print(f"Error reading bpftrace stderr: {e}")
+
+        async def process_stdout():
+            try:
+                async for line in bpftrace_process.stdout:
                     try:
-                        # "key:value key:value ..." 形式をパース
-                        for item in line_str.split():
-                            key, value = item.split(':', 1)
-                            parsed_data[key] = int(value)
+                        line_str = line.decode().strip()
+                        # 16文字の16進数固定長フォーマットをチェック
+                        if len(line_str) == 16 and all(c in '0123456789abcdef' for c in line_str.lower()):
+                            try:
+                                relfilenode = int(line_str[:8], 16)  # 最初の8文字
+                                block = int(line_str[8:], 16)        # 次の8文字
 
-                        relfilenode = parsed_data.get('relfilenode', None)
-                        block = parsed_data.get('block', None)
+                                print(f"bpftrace parsed: relfilenode={relfilenode}, block={block}")
+                                
+                                if relfilenode in relation_filenode_to_name:
+                                    packed_data = struct.pack('!II', relfilenode, block)
+                                    await manager.broadcast_bytes(packed_data)
+                                else:
+                                    print(f"bpftrace filtered: filenode={relfilenode} not in cache.")
 
-                        if relfilenode is not None and block is not None:
-                            print(f"bpftrace parsed: relfilenode={relfilenode}, Block={block}, Full Data={parsed_data}")
-                            
-                            if relfilenode in relation_filenode_to_name:
-                                packed_data = struct.pack('!II', relfilenode, block)
-                                await manager.broadcast_bytes(packed_data)
-                            else:
-                                print(f"bpftrace filtered: filenode={relfilenode} not in cache.")
-                        else:
-                            print(f"bpftrace malformed data: relfilenode or Block missing in {parsed_data}")
+                            except ValueError as e:
+                                print(f"bpftrace hex parsing error for line '{line_str}': {e}")
 
                     except Exception as e:
-                        print(f"bpftrace parsing error for line '{line_str}': {e}")
+                        print(f"Error processing bpftrace output line: {e}")
+            except Exception as e:
+                print(f"Error reading bpftrace stdout: {e}")
+        
+        # 両方のタスクを並行実行し、プロセス終了を待機
+        await asyncio.gather(
+            log_stderr(),
+            process_stdout(),
+            bpftrace_process.wait()
+        )
+        
+        print(f"bpftrace process finished with return code: {bpftrace_process.returncode}")
+        
+    except Exception as e:
+        print(f"Error running bpftrace: {e}")
+    finally:
+        # クリーンアップ
+        if bpftrace_process and bpftrace_process.returncode is None:
+            print("Terminating bpftrace process...")
+            bpftrace_process.terminate()
+            try:
+                await asyncio.wait_for(bpftrace_process.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                print("Force killing bpftrace process...")
+                bpftrace_process.kill()
+                await bpftrace_process.wait()
+        bpftrace_process = None
 
-            except Exception as e:
-                print(f"Error processing bpftrace output: {e}")
-            except Exception as e:
-                print(f"Error processing bpftrace output: {e}")
+async def cleanup_resources():
+    """アプリケーション終了時のクリーンアップ処理"""
+    global bpftrace_process
     
-    await asyncio.gather(log_stderr(), process_stdout())
-    print("bpftrace process finished.")
+    print("Starting cleanup process...")
+    
+    # WebSocket接続をクローズ
+    await manager.disconnect_all()
+    
+    # bpftraceプロセスを終了
+    if bpftrace_process and bpftrace_process.returncode is None:
+        print("Terminating bpftrace process...")
+        bpftrace_process.terminate()
+        try:
+            await asyncio.wait_for(bpftrace_process.wait(), timeout=5.0)
+            print("bpftrace process terminated gracefully")
+        except asyncio.TimeoutError:
+            print("Force killing bpftrace process...")
+            bpftrace_process.kill()
+            await bpftrace_process.wait()
+            print("bpftrace process killed")
+    
+    print("Cleanup completed.")
+
+def signal_handler():
+    """シグナルハンドラー"""
+    print("Received termination signal, initiating graceful shutdown...")
+    asyncio.create_task(cleanup_resources())
 
 @app.on_event("startup")
 async def startup_event():
+    # シグナルハンドラーの設定
+    for sig in [signal.SIGTERM, signal.SIGINT]:
+        signal.signal(sig, lambda s, f: signal_handler())
+    
     await asyncio.sleep(5)
     fetch_and_cache_relations() # 起動時に一度キャッシュを作成
     asyncio.create_task(run_bpftrace())
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """FastAPI終了時のクリーンアップ"""
+    await cleanup_resources()
 
 @app.get("/")
 async def read_root():

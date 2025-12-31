@@ -1,5 +1,5 @@
 usdt:/usr/lib/postgresql/14/bin/postgres:buffer__read__done
 {
-    printf("relfilenode:%d block:%d\n", arg4, arg1);
+    printf("%08x%08x\n", arg4, arg1);
 }
 
