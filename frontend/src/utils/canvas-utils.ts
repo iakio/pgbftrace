@@ -46,9 +46,9 @@ export function highlightBlock(
   canvas: HTMLCanvasElement,
   blockNumber: number,
   drawInfo: DrawInfo
-): () => void {
+): void {
   const ctx = canvas.getContext('2d');
-  if (!ctx) return () => {};
+  if (!ctx) return;
 
   const { blocksPerRow } = drawInfo;
   const row = Math.floor(blockNumber / blocksPerRow);
@@ -60,10 +60,24 @@ export function highlightBlock(
   // Highlight
   ctx.fillStyle = '#87CEEB';
   ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
+}
 
-  // Return cleanup function
-  return () => {
-    ctx.fillStyle = '#eee';
-    ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
-  };
+export function clearBlock(
+  canvas: HTMLCanvasElement,
+  blockNumber: number,
+  drawInfo: DrawInfo
+): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const { blocksPerRow } = drawInfo;
+  const row = Math.floor(blockNumber / blocksPerRow);
+  const col = blockNumber % blocksPerRow;
+
+  const x = TABLE_PADDING + col * (BLOCK_SIZE + BLOCK_MARGIN);
+  const y = TABLE_PADDING + row * (BLOCK_SIZE + BLOCK_MARGIN);
+
+  // Clear highlight (reset to default color)
+  ctx.fillStyle = '#eee';
+  ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
 }

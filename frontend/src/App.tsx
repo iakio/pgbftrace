@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import type { RelationInfo } from './types';
 import { useWebSocket } from './hooks/useWebSocket';
 import { TableCanvas } from './components/TableCanvas';
-import { highlightBlock, type DrawInfo } from './utils/canvas-utils';
+import { highlightBlock, clearBlock, type DrawInfo } from './utils/canvas-utils';
 import './App.css';
 
 function App() {
@@ -12,7 +12,7 @@ function App() {
   // Canvas management
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
   const drawInfos = useRef<Map<number, DrawInfo>>(new Map());
-  const timeouts = useRef<Map<string, number>>(new Map());  // Key: "relfilenode-block"
+  const highlightedBlocks = useRef<Map<string, number>>(new Map()); // blockKey -> timestamp
 
   // Handle incoming trace events - Direct canvas manipulation
   const handleTraceEvent = useCallback((traceEvent: { relfilenode: number; block: number }) => {
@@ -29,23 +29,44 @@ function App() {
     // Create unique key for this specific block
     const blockKey = `${relfilenode}-${block}`;
 
-    // Clear previous timeout for this specific block
-    const previousTimeout = timeouts.current.get(blockKey);
-    if (previousTimeout !== undefined) {
-      clearTimeout(previousTimeout);
-    }
+    // Record timestamp
+    highlightedBlocks.current.set(blockKey, Date.now());
 
-    // Highlight block and get cleanup function
-    const cleanup = highlightBlock(canvas, block, drawInfo);
-
-    // Schedule cleanup
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      timeouts.current.delete(blockKey);
-    }, 500);
-
-    timeouts.current.set(blockKey, timeoutId);
+    // Highlight block immediately
+    highlightBlock(canvas, block, drawInfo);
   }, [selectedRelations]);
+
+  // requestAnimationFrame loop to manage block clearing
+  useEffect(() => {
+    let rafId: number;
+
+    const animate = () => {
+      const now = Date.now();
+
+      highlightedBlocks.current.forEach((timestamp, blockKey) => {
+        if (now - timestamp > 500) {
+          // 500ms elapsed, clear the block
+          const [relfilenodeStr, blockStr] = blockKey.split('-');
+          const relfilenode = parseInt(relfilenodeStr, 10);
+          const block = parseInt(blockStr, 10);
+
+          const canvas = canvasRefs.current.get(relfilenode);
+          const drawInfo = drawInfos.current.get(relfilenode);
+
+          if (canvas && drawInfo) {
+            clearBlock(canvas, block, drawInfo);
+          }
+
+          highlightedBlocks.current.delete(blockKey);
+        }
+      });
+
+      rafId = requestAnimationFrame(animate);
+    };
+
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   const wsUrl = `ws://${window.location.host}/ws`;
   const { isConnected } = useWebSocket(wsUrl, { onMessage: handleTraceEvent });
