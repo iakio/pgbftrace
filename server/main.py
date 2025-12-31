@@ -21,11 +21,24 @@ class ConnectionManager:
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+            print(f"Client disconnected. Total clients: {len(self.active_connections)}")
+
 
     async def broadcast_bytes(self, message: bytes):
+        disconnected_connections = []
         for connection in self.active_connections:
-            await connection.send_bytes(message)
+            try:
+                await connection.send_bytes(message)
+            except Exception as e:
+                # Handle potential connection errors during broadcast
+                print(f"Failed to send to a client, marking for removal: {e}")
+                disconnected_connections.append(connection)
+        
+        # Clean up failed connections after the loop
+        for connection in disconnected_connections:
+            self.disconnect(connection)
 
 manager = ConnectionManager()
 

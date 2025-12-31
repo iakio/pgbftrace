@@ -2,28 +2,124 @@
 <html>
 <head>
     <title>PostgreSQL Buffer Tracer</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 20px; background-color: #f0f0f0; }
+        h1 { color: #333; }
+        #messages { margin-top: 20px; padding: 10px; border: 1px solid #ccc; background-color: #fff; width: 80%; max-height: 150px; overflow-y: scroll; box-sizing: border-box; }
+        canvas { border: 1px solid #aaa; background-color: #f8f8f8; margin-top: 20px; }
+        #legend { margin-top: 20px; width: 80%; display: flex; flex-wrap: wrap; justify-content: center; }
+        .legend-item { display: flex; align-items: center; margin: 5px 10px; }
+        .legend-color { width: 15px; height: 15px; border: 1px solid #ccc; margin-right: 5px; }
+    </style>
 </head>
 <body>
     <h1>PostgreSQL Buffer Trace Visualizer</h1>
-    <p>Connecting to WebSocket...</p>
+    <div id="legend"></div>
+    <canvas id="bufferCanvas" width="1200" height="800"></canvas>
     <div id="messages"></div>
 
     <script>
         const messages = document.getElementById("messages");
+        const canvas = document.getElementById("bufferCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const BLOCK_SIZE = 5; // 各ブロックを描画する際のピクセルサイズ
+        const BLOCK_MARGIN = 1; // ブロック間のマージン
+        const HEADER_HEIGHT = 20; // テーブル名表示領域の高さ
+        const TABLE_PADDING = 10; // テーブル領域の外側パディング
+
+        let relations = []; // 全リレーション情報
+        const relationColors = {}; // OIDと色をマッピング
+
+        // Canvasの初期描画
+        function drawInitialCanvas(relationsData) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // キャンバスをクリア
+            ctx.fillStyle = "#f8f8f8";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 各テーブルの描画位置情報を計算し、保存
+            let currentY = TABLE_PADDING;
+            let totalCanvasHeight = TABLE_PADDING; // Canvasの合計高さの初期値
+
+            relationsData.forEach((rel) => {
+                const totalBlocks = rel.total_blocks;
+                const blocksPerRow = Math.floor(
+                    (canvas.width - 2 * TABLE_PADDING) /
+                    (BLOCK_SIZE + BLOCK_MARGIN)
+                );
+                const numRows = Math.ceil(totalBlocks / blocksPerRow);
+
+                // 各テーブルの領域情報
+                rel.drawInfo = {
+                    startY: currentY,
+                    headerY: currentY + 15,
+                    blocksStartY: currentY + HEADER_HEIGHT + 5,
+                    height: HEADER_HEIGHT + 5 + numRows * (BLOCK_SIZE + BLOCK_MARGIN),
+                };
+
+                // テーブル名表示
+                ctx.fillStyle = "#333";
+                ctx.font = "14px sans-serif";
+                ctx.fillText(
+                    `${rel.relname} (OID: ${rel.oid}, Blocks: ${totalBlocks})`,
+                    TABLE_PADDING,
+                    rel.drawInfo.headerY
+                );
+
+                // ブロックのグリッドを描画
+                let blockX = TABLE_PADDING;
+                let blockY = rel.drawInfo.blocksStartY;
+
+                for (let i = 0; i < totalBlocks; i++) {
+                    ctx.fillStyle = "#eee"; // デフォルトのブロック色（より明るく）
+                    ctx.fillRect(blockX, blockY, BLOCK_SIZE, BLOCK_SIZE);
+                    blockX += BLOCK_SIZE + BLOCK_MARGIN;
+                    if ((i + 1) % blocksPerRow === 0) {
+                        blockX = TABLE_PADDING;
+                        blockY += BLOCK_SIZE + BLOCK_MARGIN;
+                    }
+                }
+                // 次のテーブルのY座標を更新
+                currentY += rel.drawInfo.height + TABLE_PADDING;
+                totalCanvasHeight += rel.drawInfo.height + TABLE_PADDING;
+            });
+            // 計算された合計高さに基づいてCanvasの高さを設定
+            canvas.height = totalCanvasHeight + TABLE_PADDING; // 下部にも少しパディング
+
+            createLegend(relationsData);
+        }
+
+        function createLegend(relationsData) {
+            const legendDiv = document.getElementById("legend");
+            legendDiv.innerHTML = ""; // クリア
+            relationsData.forEach((rel) => {
+                const legendItem = document.createElement("div");
+                legendItem.className = "legend-item";
+                const colorBox = document.createElement("div");
+                colorBox.className = "legend-color";
+                colorBox.style.backgroundColor = "#eee"; // デフォルト色に設定
+                const text = document.createTextNode(`${rel.relname}`);
+                legendItem.appendChild(colorBox);
+                legendItem.appendChild(text);
+                legendDiv.appendChild(legendItem);
+            });
+        }
 
         // 1. Fetch relation info first
         fetch("/api/relations")
-            .then(response => response.json())
-            .then(relations => {
+            .then((response) => response.json())
+            .then((relationsData) => {
+                relations = relationsData; // グローバル変数に保存
                 console.log("Initialized relations:", relations);
                 messages.innerHTML += `<p>Initialized with ${relations.length} relations.</p>`;
-                
-                // You can now use this 'relations' data to draw the initial canvas layout.
-                
+
+                // Canvasの初期描画
+                drawInitialCanvas(relations);
+
                 // 2. After fetching info, connect to WebSocket
                 setupWebSocket();
             })
-            .catch(error => {
+            .catch((error) => {
                 console.error("Error fetching relations:", error);
                 messages.innerHTML += `<p>Error fetching relations: ${error.message}</p>`;
             });
@@ -32,36 +128,67 @@
             const ws = new WebSocket(`ws://${window.location.host}/ws`);
             ws.binaryType = "arraybuffer"; // Important: receive data as binary
 
-            ws.onopen = function(event) {
+            ws.onopen = function (event) {
                 messages.innerHTML += "<p>Connected to WebSocket.</p>";
             };
 
-            ws.onmessage = function(event) {
-                // event.data is an ArrayBuffer
+            ws.onmessage = function (event) {
                 const dataView = new DataView(event.data);
-                
-                // Unpack the 2 unsigned 4-byte integers (Network Byte Order)
-                const oid = dataView.getUint32(0);
-                const block = dataView.getUint32(4);
+                const oid = dataView.getUint32(0, false);
+                const block = dataView.getUint32(4, false);
 
                 const messageText = `Received Trace: OID=${oid}, Block=${block}`;
-                console.log(messageText);
+                // console.log(messageText); // ログが多すぎるときはコメントアウト
 
                 const messageElement = document.createElement("p");
                 messageElement.textContent = messageText;
+                // メッセージ領域が溢れないように調整
+                if (messages.children.length > 100) {
+                    messages.removeChild(messages.firstChild);
+                }
                 messages.appendChild(messageElement);
+                messages.scrollTop = messages.scrollHeight;
 
-                // Here you would add the logic to find the right grid for the OID
-                // and highlight the specific block.
+                highlightBlock(oid, block);
             };
 
-            ws.onclose = function(event) {
+            ws.onclose = function (event) {
                 messages.innerHTML += "<p>Disconnected from WebSocket.</p>";
             };
 
-            ws.onerror = function(error) {
-                messages.innerHTML += `<p>WebSocket Error: ${error.message || 'Unknown error'}</p>`;
+            ws.onerror = function (error) {
+                messages.innerHTML += `<p>WebSocket Error: ${
+                    error.message || "Unknown error"
+                }</p>`;
             };
+        }
+
+        // ブロックをハイライトする関数
+        function highlightBlock(oid, blockNumber) {
+            const relInfo = relations.find((r) => r.oid === oid);
+            if (!relInfo || !relInfo.drawInfo) {
+                console.warn(`Relation with OID ${oid} not found or drawInfo missing.`);
+                return;
+            }
+
+            const blocksPerRow = Math.floor(
+                (canvas.width - 2 * TABLE_PADDING) / (BLOCK_SIZE + BLOCK_MARGIN)
+            );
+            const row = Math.floor(blockNumber / blocksPerRow);
+            const col = blockNumber % blocksPerRow;
+
+            const x = TABLE_PADDING + col * (BLOCK_SIZE + BLOCK_MARGIN);
+            const y = relInfo.drawInfo.blocksStartY + row * (BLOCK_SIZE + BLOCK_MARGIN);
+
+            // ハイライト (一時的に色を変える)
+            ctx.fillStyle = "#ccc"; // アクセス時の色（少し濃いグレー）
+            ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
+
+            // タイムアウトで元の色に戻す (デフラグ風)
+            setTimeout(() => {
+                ctx.fillStyle = "#eee"; // デフォルトのブロック色に戻す
+                ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
+            }, 500); // 0.5秒後に戻る
         }
     </script>
 </body>
