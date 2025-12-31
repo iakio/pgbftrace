@@ -9,32 +9,60 @@
     <div id="messages"></div>
 
     <script>
-        var ws = new WebSocket("ws://localhost:8000/ws"); // FastAPIのWebSocketエンドポイント
+        const messages = document.getElementById("messages");
 
-        ws.onopen = function(event) {
-            document.getElementById("messages").innerHTML += "<p>Connected to WebSocket.</p>";
-        };
+        // 1. Fetch relation info first
+        fetch("/api/relations")
+            .then(response => response.json())
+            .then(relations => {
+                console.log("Initialized relations:", relations);
+                messages.innerHTML += `<p>Initialized with ${relations.length} relations.</p>`;
+                
+                // You can now use this 'relations' data to draw the initial canvas layout.
+                
+                // 2. After fetching info, connect to WebSocket
+                setupWebSocket();
+            })
+            .catch(error => {
+                console.error("Error fetching relations:", error);
+                messages.innerHTML += `<p>Error fetching relations: ${error.message}</p>`;
+            });
 
-        ws.onmessage = function(event) {
-            var messages = document.getElementById("messages");
-            var data = JSON.parse(event.data);
-            
-            // コンソールにオブジェクトとして表示
-            console.log(data);
+        function setupWebSocket() {
+            const ws = new WebSocket(`ws://${window.location.host}/ws`);
+            ws.binaryType = "arraybuffer"; // Important: receive data as binary
 
-            // 画面にテキストとして表示
-            var message = document.createElement("p");
-            message.textContent = `Received: OID=${data.oid}, Block=${data.block}`;
-            messages.appendChild(message);
-        };
+            ws.onopen = function(event) {
+                messages.innerHTML += "<p>Connected to WebSocket.</p>";
+            };
 
-        ws.onclose = function(event) {
-            document.getElementById("messages").innerHTML += "<p>Disconnected from WebSocket.</p>";
-        };
+            ws.onmessage = function(event) {
+                // event.data is an ArrayBuffer
+                const dataView = new DataView(event.data);
+                
+                // Unpack the 2 unsigned 4-byte integers (Network Byte Order)
+                const oid = dataView.getUint32(0);
+                const block = dataView.getUint32(4);
 
-        ws.onerror = function(error) {
-            document.getElementById("messages").innerHTML += "<p>WebSocket Error: " + error.message + "</p>";
-        };
+                const messageText = `Received Trace: OID=${oid}, Block=${block}`;
+                console.log(messageText);
+
+                const messageElement = document.createElement("p");
+                messageElement.textContent = messageText;
+                messages.appendChild(messageElement);
+
+                // Here you would add the logic to find the right grid for the OID
+                // and highlight the specific block.
+            };
+
+            ws.onclose = function(event) {
+                messages.innerHTML += "<p>Disconnected from WebSocket.</p>";
+            };
+
+            ws.onerror = function(error) {
+                messages.innerHTML += `<p>WebSocket Error: ${error.message || 'Unknown error'}</p>`;
+            };
+        }
     </script>
 </body>
 </html>

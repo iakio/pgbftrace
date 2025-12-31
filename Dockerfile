@@ -50,7 +50,7 @@ COPY ./static /app/static
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
     export PATH="/root/.local/bin:$PATH" && \
     uv venv /opt/venv && \
-    uv pip install --python /opt/venv/bin/python fastapi uvicorn websockets
+    uv pip install --python /opt/venv/bin/python fastapi uvicorn websockets psycopg2-binary
 
 # Expose the port the app runs on
 EXPOSE 8000
