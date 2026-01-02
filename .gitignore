@@ -3,3 +3,5 @@ __pycache__/
 # Python virtual environment
 .venv/
 server/fastapi.log
+# PostgreSQL data directory
+data/

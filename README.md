@@ -8,7 +8,9 @@ PostgreSQLの内部動作を学習する教材として利用することを想�
 
 -   **リアルタイム可視化**: PostgreSQLのバッファI/Oを即座にCanvasに反映。
 -   **テーブルごとのグリッド表示**: 各テーブルやインデックスごとに独立したCanvasにブロックグリッドを表示。
--   **デフラグ風ハイライト**: アクセスがあったブロックを一時的にハイライト表示。
+-   **テーブル/インデックス分離表示**: サイドバーでテーブルとインデックスを分けて表示し、選択可能。
+-   **デフラグ風ハイライト**: アクセスがあったブロックを一時的にハイライト表示。requestAnimationFrameによる効率的な描画。
+-   **データ永続化**: Docker名前付きボリュームによるPostgreSQLデータの永続化。
 -   **Dockerで完結**: 簡単に環境構築・再現が可能。
 
 ## 🚀 動作要件
@@ -35,10 +37,16 @@ docker build -t bpftrace-dev .
 
 ### 3. コンテナの起動
 
-`./bin/up.sh`スクリプトを実行して、FastAPIサーバーとPostgreSQLサービスを起動します。このスクリプトはコンテナに `pgbftrace_app` という名前を付けます。
+`./bin/up.sh`スクリプトを実行して、FastAPIサーバーとPostgreSQLサービスを起動します。このスクリプトはコンテナに `pgbftrace_app` という名前を付け、PostgreSQLデータを永続化するための名前付きボリューム `pgbftrace_pgdata` を作成します。
 
 ```bash
 ./bin/up.sh
+```
+
+**注**: PostgreSQLのデータはDocker名前付きボリュームに保存されるため、コンテナを再起動してもデータは保持されます。データをクリアしたい場合は、以下のコマンドでボリュームを削除してください：
+
+```bash
+docker volume rm pgbftrace_pgdata
 ```
 
 ## 💡 使い方
@@ -51,7 +59,10 @@ Webブラウザで以下のURLにアクセスします。
 http://localhost:8000/
 ```
 
-Canvas上にPostgreSQL内のテーブルやインデックスがグリッド形式で表示され、WebSocketへの接続が確立されます。
+サイドバーにテーブルとインデックスが分けて一覧表示され、選択したリレーションのブロックがCanvas上にグリッド形式で表示されます。WebSocketへの接続も自動的に確立されます。
+
+-   **🔄 Reloadボタン**: テーブル一覧の右上にあるReloadボタンをクリックすると、PostgreSQLから最新のテーブル情報を再取得できます。
+-   **チェックボックス**: 各テーブル/インデックスの左にあるチェックボックスで、表示するリレーションを選択できます。
 
 ### 2. PostgreSQLを操作
 
@@ -99,13 +110,15 @@ psql -U postgres -d postgres
 -   **`models.py`**: データモデル定義（`TraceEvent`, `RelationInfo`）
 
 ### **API エンドポイント**
--   **HTTP `GET /api/relations`**: PostgreSQLからテーブル情報を取得してJSON形式で提供。`relfilenode`キャッシュも更新。
+-   **HTTP `GET /api/relations`**: PostgreSQLからテーブル情報（`relkind`含む）を取得してJSON形式で提供。`relfilenode`キャッシュも更新。
 -   **WebSocket `/ws`**: `bpftrace`からの16進数固定長出力（16文字）をパースし、キャッシュされた`relfilenode`のI/Oイベントのみをバイナリ形式でブロードキャスト。
 
 ### **フロントエンド層**
--   **Vanilla JavaScript (ブラウザ)**:
-    -   `GET /api/relations`で初期テーブル情報を取得し、各テーブルに対応するCanvasを動的に生成
-    -   WebSocketで受信したバイナリデータをパースし、対応するCanvasのブロックをハイライト表示
+-   **React + TypeScript + Vite (プロダクションビルド)**:
+    -   `GET /api/relations`で初期テーブル情報を取得し、`relkind`に基づいてテーブルとインデックスを分離表示
+    -   各リレーションに対応するCanvasコンポーネントを動的に生成
+    -   WebSocketで受信したバイナリデータをコールバック経由で処理し、対応するCanvasのブロックをハイライト表示
+    -   requestAnimationFrameを使用した効率的なブロッククリア処理（再レンダリングゼロ）
 
 ## 📄 ライセンス
 

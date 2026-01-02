@@ -24,6 +24,7 @@ docker run --rm -d \
   -v /sys/fs/bpf:/sys/fs/bpf \
   -v /usr/src:/usr/src:ro \
   -v "$PWD":/app \
+  -v pgbftrace_pgdata:/var/lib/postgresql/14/main \
   -p 8000:8000 \
   --name pgbftrace_app \
   bpftrace-dev
