@@ -20,7 +20,7 @@ class Config:
     # Server settings
     host: str = "0.0.0.0"
     port: int = 8000
-    static_dir: str = "../static"
+    static_dir: str = "../frontend/dist"
     
     # WebSocket settings
     websocket_timeout: int = 3600

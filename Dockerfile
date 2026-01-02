@@ -18,6 +18,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 #                          available, which usually means mounting /lib/modules and /usr/src
 #                          from the host.
 # - git, make, gcc: General development tools
+# Install Node.js for frontend build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bpftrace \
     bpfcc-tools \
@@ -32,6 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     curl \
     ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Overwrite pg_hba.conf for full trust authentication for local connections
@@ -44,7 +47,10 @@ WORKDIR /app
 
 # Copy application files before installing dependencies
 COPY ./server /app/server
-COPY ./static /app/static
+COPY ./frontend /app/frontend
+
+# Build frontend
+RUN cd /app/frontend && npm install && npm run build
 
 # Install uv, create venv in a non-mounted location, and install dependencies
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \

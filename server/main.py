@@ -1,7 +1,8 @@
 import asyncio
 import signal
+from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import Config
@@ -15,7 +16,6 @@ config = Config.from_env()
 
 # Initialize FastAPI app
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=config.static_dir), name="static")
 
 # Initialize managers
 websocket_manager = ConnectionManager()
@@ -82,14 +82,6 @@ async def shutdown_event():
     await cleanup_resources()
 
 
-@app.get("/")
-async def read_root():
-    """Serve main HTML page"""
-    with open(f"{config.static_dir}/index.html", "r") as f:
-        html_content = f.read()
-    return HTMLResponse(content=html_content, status_code=200)
-
-
 @app.get("/api/relations", response_class=JSONResponse)
 def get_relations():
     """Get relation information and update cache"""
@@ -108,6 +100,19 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         websocket_manager.disconnect(websocket)
         print("Client disconnected")
+
+
+# Mount static files (assets like JS, CSS)
+app.mount("/assets", StaticFiles(directory=f"{config.static_dir}/assets"), name="assets")
+
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    """Serve React SPA - catch-all route for client-side routing"""
+    index_path = Path(config.static_dir) / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return HTMLResponse(content="<h1>404 Not Found</h1>", status_code=404)
 
 
 if __name__ == "__main__":
