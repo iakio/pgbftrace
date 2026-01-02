@@ -21,7 +21,6 @@
 }
 
 .connection-status {
-  font-size: 0.9rem;
   padding: 0.5rem 1rem;
   background-color: #f8f8f8;
   border-radius: 4px;
@@ -43,7 +42,6 @@
 
 .sidebar h2 {
   margin-top: 0;
-  font-size: 1.2rem;
   color: #333;
   margin-bottom: 1rem;
 }
@@ -57,10 +55,7 @@
 .table-item {
   display: flex;
   align-items: center;
-  padding: 0.5rem;
-  border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.2s;
 }
 
 .table-item:hover {
@@ -73,11 +68,6 @@
 
 .table-item span {
   flex: 1;
-}
-
-.table-blocks {
-  font-size: 0.8rem;
-  color: #666;
 }
 
 .canvas-container {
@@ -99,7 +89,6 @@
 }
 
 .table-header {
-  font-weight: bold;
   margin-bottom: 5px;
   padding-bottom: 5px;
   border-bottom: 1px solid #eee;
@@ -108,4 +97,16 @@
 canvas {
   border: 1px solid #aaa;
   background-color: #f8f8f8;
+}
+
+.text-sm {
+  font-size: 0.875rem;
+}
+
+.text-base {
+  font-size: 1rem;
+}
+
+.text-lg {
+  font-size: 1.125rem;
 }

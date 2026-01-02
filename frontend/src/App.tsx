@@ -108,24 +108,23 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>PostgreSQL Buffer Trace Visualizer</h1>
-        <div className="connection-status">
+        <div className="connection-status text-sm">
           WebSocket: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
         </div>
       </header>
 
       <div className="app-content">
         <aside className="sidebar">
-          <h2>Tables</h2>
+          <h2 className="text-lg">Tables</h2>
           <div className="table-list">
             {relations.map((relation) => (
-              <label key={relation.relfilenode} className="table-item">
+              <label key={relation.relfilenode} className="table-item text-sm">
                 <input
                   type="checkbox"
                   checked={selectedRelations.has(relation.relfilenode)}
                   onChange={() => toggleRelation(relation.relfilenode)}
                 />
                 <span>{relation.relname}</span>
-                <span className="table-blocks">({relation.total_blocks} blocks)</span>
               </label>
             ))}
           </div>

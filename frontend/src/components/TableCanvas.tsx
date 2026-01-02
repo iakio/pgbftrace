@@ -29,7 +29,7 @@ export const TableCanvas = forwardRef<HTMLCanvasElement, TableCanvasProps>(
     return (
       <div className="table-canvas-wrapper">
         <div className="table-header">
-          <strong>{relation.relname}</strong> (OID: {relation.oid}, Blocks: {relation.total_blocks})
+          <strong>{relation.relname}</strong> <span className="text-sm">(OID: {relation.oid}, Blocks: {relation.total_blocks})</span>
         </div>
         <canvas ref={canvasRef} width={CANVAS_WIDTH} />
       </div>
