@@ -71,8 +71,8 @@ function App() {
   const wsUrl = `ws://${window.location.host}/ws`;
   const { isConnected } = useWebSocket(wsUrl, { onMessage: handleTraceEvent });
 
-  // Fetch relations on mount
-  useEffect(() => {
+  // Fetch relations function
+  const fetchRelations = useCallback(() => {
     fetch('/api/relations')
       .then((res) => res.json())
       .then((data: RelationInfo[]) => {
@@ -82,6 +82,11 @@ function App() {
       })
       .catch((err) => console.error('Error fetching relations:', err));
   }, []);
+
+  // Fetch relations on mount
+  useEffect(() => {
+    fetchRelations();
+  }, [fetchRelations]);
 
   // Handle canvas initialization
   const handleCanvasInitialized = useCallback((relfilenode: number, drawInfo: DrawInfo) => {
@@ -124,7 +129,12 @@ function App() {
 
       <div className="app-content">
         <aside className="sidebar">
-          <h2 className="text-lg">Tables</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2 className="text-lg" style={{ margin: 0 }}>Tables</h2>
+            <button onClick={fetchRelations} className="reload-button text-sm">
+              🔄 Reload
+            </button>
+          </div>
           <div className="table-list">
             {tables.map((relation) => (
               <label key={relation.relfilenode} className="table-item text-sm">

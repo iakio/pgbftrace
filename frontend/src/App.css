@@ -110,3 +110,20 @@ canvas {
 .text-lg {
   font-size: 1.125rem;
 }
+
+.reload-button {
+  padding: 0.25rem 0.75rem;
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.reload-button:hover {
+  background-color: #e0e0e0;
+}
+
+.reload-button:active {
+  background-color: #d0d0d0;
+}
