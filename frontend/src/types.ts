@@ -3,6 +3,7 @@ export interface RelationInfo {
   relname: string;
   total_blocks: number;
   relfilenode: number;
+  relkind: string;
 }
 
 export interface TraceEvent {

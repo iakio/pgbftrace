@@ -104,6 +104,15 @@ function App() {
     selectedRelations.has(r.relfilenode)
   );
 
+  // Separate tables and indexes, sort alphabetically
+  const tables = relations
+    .filter((r) => r.relkind === 'r' || r.relkind === 'p')
+    .sort((a, b) => a.relname.localeCompare(b.relname));
+
+  const indexes = relations
+    .filter((r) => r.relkind === 'i' || r.relkind === 'I')
+    .sort((a, b) => a.relname.localeCompare(b.relname));
+
   return (
     <div className="app">
       <header className="app-header">
@@ -117,7 +126,21 @@ function App() {
         <aside className="sidebar">
           <h2 className="text-lg">Tables</h2>
           <div className="table-list">
-            {relations.map((relation) => (
+            {tables.map((relation) => (
+              <label key={relation.relfilenode} className="table-item text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedRelations.has(relation.relfilenode)}
+                  onChange={() => toggleRelation(relation.relfilenode)}
+                />
+                <span>{relation.relname}</span>
+              </label>
+            ))}
+          </div>
+
+          <h2 className="text-lg" style={{ marginTop: '1.5rem' }}>Indexes</h2>
+          <div className="table-list">
+            {indexes.map((relation) => (
               <label key={relation.relfilenode} className="table-item text-sm">
                 <input
                   type="checkbox"

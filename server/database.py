@@ -26,26 +26,27 @@ class RelationCache:
             conn = psycopg2.connect(self.config.postgres_dsn)
             cur = conn.cursor()
             cur.execute("""
-                SELECT c.oid, c.relname, c.relpages, c.relfilenode
+                SELECT c.oid, c.relname, c.relpages, c.relfilenode, c.relkind
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE c.relkind IN ('r', 'i', 'p', 'I')
                   AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast');
             """)
-            
+
             results = cur.fetchall()
             cur.close()
 
-            for oid, relname, relpages, relfilenode in results:
+            for oid, relname, relpages, relfilenode, relkind in results:
                 if relfilenode == 0:  # Skip relations without physical files
                     continue
 
-                total_blocks = relpages if relpages > 0 else 1 
+                total_blocks = relpages if relpages > 0 else 1
                 relation_info = RelationInfo(
                     oid=oid,
                     relname=relname,
                     total_blocks=total_blocks,
-                    relfilenode=relfilenode
+                    relfilenode=relfilenode,
+                    relkind=relkind
                 )
                 
                 relations_for_api.append(relation_info)

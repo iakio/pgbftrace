@@ -9,13 +9,15 @@ class RelationInfo:
     relname: str
     total_blocks: int
     relfilenode: int
-    
+    relkind: str
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "oid": self.oid,
             "relname": self.relname,
             "total_blocks": self.total_blocks,
-            "relfilenode": self.relfilenode
+            "relfilenode": self.relfilenode,
+            "relkind": self.relkind
         }
 
 
