@@ -127,3 +127,18 @@ canvas {
 .reload-button:active {
   background-color: #d0d0d0;
 }
+
+.sidebar-toggle {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  padding: 1rem 0.5rem;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+.sidebar-toggle:hover {
+  background-color: #f8f8f8;
+}
+

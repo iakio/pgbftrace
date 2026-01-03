@@ -8,6 +8,7 @@ import './App.css';
 function App() {
   const [relations, setRelations] = useState<RelationInfo[]>([]);
   const [selectedRelations, setSelectedRelations] = useState<Set<number>>(new Set());
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Canvas management
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
@@ -128,13 +129,17 @@ function App() {
       </header>
 
       <div className="app-content">
-        <aside className="sidebar">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 className="text-lg" style={{ margin: 0 }}>Tables</h2>
-            <button onClick={fetchRelations} className="reload-button text-sm">
-              🔄 Reload
-            </button>
-          </div>
+        <div style={{display: 'flex'}}>
+          <aside className="sidebar" style={{
+              transition: 'margin-left 0.2s',
+              marginLeft: sidebarOpen ? 0 : '-250px'
+            }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h2 className="text-lg" style={{ margin: 0 }}>Tables</h2>
+              <button onClick={fetchRelations} className="reload-button text-sm">
+                🔄 Reload
+              </button>
+            </div>
           <div className="table-list">
             {tables.map((relation) => (
               <label key={relation.relfilenode} className="table-item text-sm">
@@ -161,7 +166,16 @@ function App() {
               </label>
             ))}
           </div>
-        </aside>
+          </aside>
+
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          >
+            {sidebarOpen ? '◀' : '▶'}
+          </button>
+        </div>
 
         <main className="canvas-container">
           {selectedRelationsList.map((relation) => (
