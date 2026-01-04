@@ -27,8 +27,8 @@ export const TableCanvas = forwardRef<HTMLCanvasElement, TableCanvasProps>(
     }, [relation, onInitialized]);
 
     return (
-      <div className="table-canvas-wrapper">
-        <div className="table-header">
+      <div className="bg-white border border-gray-300 rounded-md p-2.5 shadow-md">
+        <div className="mb-1 pb-1 border-b border-gray-200">
           <strong>{relation.relname}</strong> <span className="text-sm">(OID: {relation.oid}, Blocks: {relation.total_blocks})</span>
         </div>
         <canvas ref={canvasRef} width={CANVAS_WIDTH} />
