@@ -1,0 +1,43 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  # BPF tools
+  - bpftrace
+  - bpfcc-tools
+  - linux-headers-generic
+  # PostgreSQL
+  - postgresql
+  - postgresql-client
+  # Python
+  - python3
+  - python3-pip
+  - python3-venv
+  # Node.js will be installed via script
+  - curl
+  - ca-certificates
+  - git
+
+runcmd:
+  # Install Node.js 20.x
+  - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  - apt-get install -y nodejs
+
+  # Configure PostgreSQL for trust authentication (local dev only)
+  - |
+    cat > /etc/postgresql/14/main/pg_hba.conf << 'EOF'
+    local   all             all                                     trust
+    host    all             all             127.0.0.1/32            trust
+    host    all             all             ::1/128                 trust
+    EOF
+  - systemctl restart postgresql
+
+  # Install uv (Python package manager)
+  - curl -LsSf https://astral.sh/uv/install.sh | sudo -u ubuntu sh
+
+  # Create Python venv and install dependencies
+  - sudo -u ubuntu /home/ubuntu/.local/bin/uv venv /home/ubuntu/venv
+  - sudo -u ubuntu /home/ubuntu/.local/bin/uv pip install --python /home/ubuntu/venv/bin/python fastapi uvicorn websockets psycopg2-binary
+
+final_message: "pgbftrace VM is ready! Connect with: multipass shell pgbftrace"

@@ -20,6 +20,8 @@ PostgreSQLの内部動作を学習する教材として利用することを想�
 
 ## 📦 セットアップ
 
+### Option A: Docker (Linux/WSL2)
+
 ### 1. リポジトリのクローン
 
 ```bash
@@ -47,6 +49,62 @@ docker build -t bpftrace-dev .
 
 ```bash
 docker volume rm pgbftrace_pgdata
+```
+
+### Option B: Multipass (macOS)
+
+macOSではeBPFが直接動作しないため、Multipassを使用してUbuntu VMを作成し、その中で実行します。
+
+#### 1. Multipassのインストール
+
+```bash
+brew install multipass
+```
+
+#### 2. VMのセットアップ
+
+```bash
+./bin/multipass-setup.sh
+```
+
+このスクリプトは以下を行います：
+- Ubuntu 22.04 VM (`pgbftrace`) を作成
+- 必要なパッケージ (bpftrace, PostgreSQL, Node.js, Python) をインストール
+- プロジェクトディレクトリをVMにマウント
+
+#### 3. VMに接続してアプリを起動
+
+```bash
+# VMに接続
+multipass shell pgbftrace
+
+# アプリを起動
+cd ~/pgbftrace
+./bin/multipass-run.sh
+```
+
+#### 4. ブラウザでアクセス
+
+VM の IP アドレスを確認して、ブラウザでアクセスします。
+
+```bash
+# Mac側で実行
+multipass info pgbftrace | grep IPv4
+```
+
+`http://<VM_IP>:8000/` でアクセスできます。
+
+#### VMの管理
+
+```bash
+# VM を停止
+multipass stop pgbftrace
+
+# VM を再起動
+multipass start pgbftrace
+
+# VM を削除
+multipass delete pgbftrace && multipass purge
 ```
 
 ## 💡 使い方
