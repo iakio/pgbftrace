@@ -74,19 +74,22 @@ function App() {
 
   // Fetch relations function
   const fetchRelations = useCallback(() => {
-    fetch('/api/relations')
+    return fetch('/api/relations')
       .then((res) => res.json())
       .then((data: RelationInfo[]) => {
         setRelations(data);
-        // Select all relations by default
-        setSelectedRelations(new Set(data.map((r) => r.relfilenode)));
-      })
-      .catch((err) => console.error('Error fetching relations:', err));
+        // Remove selections for deleted relations
+        const validFilenodes = new Set(data.map((r) => r.relfilenode));
+        setSelectedRelations((prev) => prev.intersection(validFilenodes));
+        return data;
+      });
   }, []);
 
-  // Fetch relations on mount
+  // Fetch relations on mount (select all initially)
   useEffect(() => {
-    fetchRelations();
+    fetchRelations()
+      .then((data) => setSelectedRelations(new Set(data.map((r) => r.relfilenode))))
+      .catch((err) => console.error('Error fetching relations:', err));
   }, [fetchRelations]);
 
   // Handle canvas initialization
@@ -137,7 +140,7 @@ function App() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg m-0 text-gray-800">Tables</h2>
               <button
-                onClick={fetchRelations}
+                onClick={() => fetchRelations()}
                 className="px-3 py-1 bg-gray-100 border border-gray-300 rounded cursor-pointer text-sm transition-colors hover:bg-gray-200 active:bg-gray-300"
               >
                 🔄 Reload
