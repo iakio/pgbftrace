@@ -36,9 +36,10 @@ export const useWebSocket = (
       const dataView = new DataView(event.data);
       const relfilenode = dataView.getUint32(0, false);
       const block = dataView.getUint32(4, false);
+      const hit = dataView.getUint32(8, false);
 
       // Call callback directly without state update
-      onMessageRef.current?.({ relfilenode, block });
+      onMessageRef.current?.({ relfilenode, block, hit });
     };
 
     ws.onclose = () => {

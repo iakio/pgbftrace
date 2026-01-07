@@ -52,5 +52,5 @@ class ConnectionManager:
 
     async def broadcast_trace_event(self, trace_event: TraceEvent):
         """Broadcast trace event as binary data"""
-        packed_data = struct.pack('!II', trace_event.relfilenode, trace_event.block)
+        packed_data = struct.pack('!III', trace_event.relfilenode, trace_event.block, trace_event.hit)
         await self.broadcast_bytes(packed_data)

@@ -45,7 +45,8 @@ export function initializeCanvas(
 export function highlightBlock(
   canvas: HTMLCanvasElement,
   blockNumber: number,
-  drawInfo: DrawInfo
+  drawInfo: DrawInfo,
+  hit: number
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -58,7 +59,7 @@ export function highlightBlock(
   const y = TABLE_PADDING + row * (BLOCK_SIZE + BLOCK_MARGIN);
 
   // Highlight
-  ctx.fillStyle = '#87CEEB';
+  ctx.fillStyle = hit ? '#2563eb' : '#ef4444';
   ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
 }
 

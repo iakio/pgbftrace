@@ -1,5 +1,6 @@
 usdt:/usr/lib/postgresql/14/bin/postgres:buffer__read__done
 {
-    printf("%08x%08x\n", arg4, arg1);
+    $arg6 = **(uint8 **)(reg("sp") + 8);
+    printf("%08x%08x%08x\n", arg4, arg1, $arg6);
 }
 

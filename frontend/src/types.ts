@@ -9,6 +9,7 @@ export interface RelationInfo {
 export interface TraceEvent {
   relfilenode: number;
   block: number;
+  hit: number;
 }
 
 export interface DrawInfo {

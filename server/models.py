@@ -26,16 +26,18 @@ class TraceEvent:
     """BPF trace event data"""
     relfilenode: int
     block: int
+    hit: int
     
     @classmethod
     def from_hex_string(cls, hex_str: str) -> Optional["TraceEvent"]:
         """Parse 16-character hex string into TraceEvent"""
-        if len(hex_str) != 16 or not all(c in '0123456789abcdef' for c in hex_str.lower()):
+        if len(hex_str) != 24 or not all(c in '0123456789abcdef' for c in hex_str.lower()):
             return None
         
         try:
             relfilenode = int(hex_str[:8], 16)
-            block = int(hex_str[8:], 16)
-            return cls(relfilenode=relfilenode, block=block)
+            block = int(hex_str[8:16], 16)
+            hit = int(hex_str[16:24], 16)
+            return cls(relfilenode=relfilenode, block=block, hit=hit)
         except ValueError:
             return None

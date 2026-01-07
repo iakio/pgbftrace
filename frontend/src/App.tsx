@@ -16,8 +16,9 @@ function App() {
   const highlightedBlocks = useRef<Map<string, number>>(new Map()); // blockKey -> timestamp
 
   // Handle incoming trace events - Direct canvas manipulation
-  const handleTraceEvent = useCallback((traceEvent: { relfilenode: number; block: number }) => {
-    const { relfilenode, block } = traceEvent;
+  const handleTraceEvent = useCallback((traceEvent: { relfilenode: number; block: number, hit: number }) => {
+    const { relfilenode, block, hit } = traceEvent;
+    console.log(`handleTraceEvent ${relfilenode}, ${block}, ${hit}`)
 
     // Only process if relation is selected
     if (!selectedRelations.has(relfilenode)) return;
@@ -34,7 +35,7 @@ function App() {
     highlightedBlocks.current.set(blockKey, Date.now());
 
     // Highlight block immediately
-    highlightBlock(canvas, block, drawInfo);
+    highlightBlock(canvas, block, drawInfo, hit);
   }, [selectedRelations]);
 
   // requestAnimationFrame loop to manage block clearing
