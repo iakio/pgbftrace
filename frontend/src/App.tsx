@@ -3,7 +3,6 @@ import type { RelationInfo } from './types';
 import { useWebSocket } from './hooks/useWebSocket';
 import { TableCanvas } from './components/TableCanvas';
 import { highlightBlock, clearBlock, type DrawInfo } from './utils/canvas-utils';
-import './App.css';
 
 function App() {
   const [relations, setRelations] = useState<RelationInfo[]>([]);
@@ -125,7 +124,7 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
-      <header className="bg-white px-8 py-4 shadow-md flex justify-between items-center">
+      <header className="bg-white px-8 py-2 shadow-md flex justify-between items-center">
         <h1 className="m-0 text-2xl text-gray-800 font-bold">PostgreSQL Buffer Trace Visualizer</h1>
         <div className="px-4 py-2 bg-gray-50 rounded text-sm">
           WebSocket: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
@@ -138,7 +137,7 @@ function App() {
             className="w-64 bg-white border-r border-gray-300 p-4 overflow-y-auto transition-[margin-left] duration-200"
             style={{ marginLeft: sidebarOpen ? 0 : '-256px' }}
           >
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center">
               <h2 className="text-lg m-0 text-gray-800">Tables</h2>
               <button
                 onClick={() => fetchRelations()}
@@ -186,7 +185,7 @@ function App() {
           </button>
         </div>
 
-        <main className="flex-1 p-4 overflow-y-auto flex flex-wrap gap-4 content-start">
+        <main className="flex-1 p-4 overflow-y-auto flex flex-wrap gap-4 content-start items-start">
           {selectedRelationsList.map((relation) => (
             <TableCanvas
               key={relation.relfilenode}

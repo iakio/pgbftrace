@@ -1,6 +1,9 @@
-const BLOCK_SIZE = 5;
+const BLOCK_SIZE = 7;
 const BLOCK_MARGIN = 1;
-const TABLE_PADDING = 10;
+const TABLE_PADDING = 0;
+const COLOR_HIT = '#60a5fa';
+const COLOR_MISS = '#2563eb';
+const COLOR_DEFAULT = '#cbd5e1';
 
 export interface DrawInfo {
   blocksPerRow: number;
@@ -30,7 +33,7 @@ export function initializeCanvas(
   let blockY = TABLE_PADDING;
 
   for (let i = 0; i < totalBlocks; i++) {
-    ctx.fillStyle = '#eee';
+    ctx.fillStyle = COLOR_DEFAULT;
     ctx.fillRect(blockX, blockY, BLOCK_SIZE, BLOCK_SIZE);
     blockX += BLOCK_SIZE + BLOCK_MARGIN;
     if ((i + 1) % blocksPerRow === 0) {
@@ -59,7 +62,7 @@ export function highlightBlock(
   const y = TABLE_PADDING + row * (BLOCK_SIZE + BLOCK_MARGIN);
 
   // Highlight
-  ctx.fillStyle = hit ? '#2563eb' : '#ef4444';
+  ctx.fillStyle = hit ? COLOR_HIT : COLOR_MISS;
   ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
 }
 
@@ -79,6 +82,6 @@ export function clearBlock(
   const y = TABLE_PADDING + row * (BLOCK_SIZE + BLOCK_MARGIN);
 
   // Clear highlight (reset to default color)
-  ctx.fillStyle = '#eee';
+  ctx.fillStyle = COLOR_DEFAULT;
   ctx.fillRect(x, y, BLOCK_SIZE, BLOCK_SIZE);
 }
